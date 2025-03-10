@@ -2,10 +2,8 @@ import * as THREE from '../lib/three.module.js';
 import { OrbitControls } from '../lib/examples/jsm/controls/OrbitControls.js';
 
 // Game variables
-let scene, camera, renderer, controls;
-let player, gun, bullets = [], targets = [], planets = [];
-let score = 0;
-let health = 100;
+let scene, camera, renderer;
+let player, character;
 let isGameOver = false;
 let raycaster, mouse;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
@@ -13,401 +11,1000 @@ let playerVelocity = new THREE.Vector3();
 let playerDirection = new THREE.Vector3();
 let clock = new THREE.Clock();
 
-// Gun variables
-let currentGun = 'assault';
-let fireMode = 'auto'; // 'single', 'burst', 'auto'
-let isShooting = false;
-let canShoot = true;
-let recoilAmount = 0;
-let maxRecoil = 0.05;
-let recoilRecovery = 0.005;
-let bulletSpread = 0.02;
-let ammo = 30;
-let maxAmmo = 30;
-let totalAmmo = 120;
-let isReloading = false;
-let burstCount = 0;
-let burstMax = 3;
-let fireRate = 100; // milliseconds between shots
-let lastShotTime = 0;
-let hitMarkers = [];
+// Mini-map variables
+let minimapPlayerIndicator, minimapDirectionIndicator;
+let buildingIndicators = [];
+
+// City variables
+let currentZone = "Downtown District";
+let footstepSound;
+let lastFootstepTime = 0;
+let footstepInterval = 400; // ms between footstep sounds
+let currentFloorMaterial = "concrete"; // default floor material
+
+// Solana city buildings data
+const buildings = [
+    {
+        name: "Solana Shop",
+        description: "A high-end tech store featuring the latest Solana-powered devices and merchandise.",
+        position: new THREE.Vector3(10, 0, 10),
+        color: 0x9945FF,
+        website: "https://solana.com/shop",
+        zone: "Commercial District",
+        type: "commercial",
+        height: 8,
+        width: 15,
+        depth: 12,
+        items: [
+            { name: "Solana Hardware Wallet", price: "25 SOL", description: "Secure cold storage for your Solana assets" },
+            { name: "Solana Developer Kit", price: "50 SOL", description: "Everything you need to build on Solana" },
+            { name: "Limited Edition NFT", price: "10 SOL", description: "Exclusive digital collectible only available in-store" }
+        ]
+    },
+    {
+        name: "Drift Exchange Tower",
+        description: "The headquarters of Drift Protocol, offering perpetual futures trading with up to 20x leverage.",
+        position: new THREE.Vector3(20, 0, -20),
+        color: 0x00BFFF,
+        website: "https://www.drift.trade/",
+        zone: "Financial District",
+        type: "commercial",
+        height: 30,
+        width: 10,
+        depth: 10,
+        items: [
+            { name: "Trading Account", price: "5 SOL", description: "Open a trading account with Drift Exchange" },
+            { name: "Trading Bot License", price: "15 SOL", description: "Automated trading software for Drift" },
+            { name: "VIP Trading Floor Access", price: "10 SOL", description: "Exclusive access to premium trading features" }
+        ]
+    },
+    {
+        name: "Jito Validator Complex",
+        description: "A high-security facility housing Jito's MEV infrastructure that maximizes validator rewards and improves network performance.",
+        position: new THREE.Vector3(-20, 0, -20),
+        color: 0xFF6347,
+        website: "https://jito.network/",
+        zone: "Blockchain District",
+        type: "infrastructure",
+        height: 15,
+        width: 15,
+        depth: 15,
+        items: [
+            { name: "Validator Node Setup", price: "20 SOL", description: "Professional installation of a Jito validator node" },
+            { name: "MEV Extraction License", price: "8 SOL", description: "Permission to extract MEV on the Solana network" },
+            { name: "Staking Services", price: "3 SOL", description: "Managed staking with Jito validators" }
+        ]
+    },
+    {
+        name: "Helius Developer Hub",
+        description: "A modern workspace providing developer infrastructure and APIs for building applications on Solana.",
+        position: new THREE.Vector3(20, 0, 20),
+        color: 0x32CD32,
+        website: "https://helius.xyz/",
+        zone: "Tech Park",
+        type: "commercial",
+        height: 20,
+        width: 12,
+        depth: 12,
+        items: [
+            { name: "API Subscription", price: "12 SOL", description: "Monthly access to premium Solana APIs" },
+            { name: "Developer Workspace", price: "7 SOL", description: "Rent a desk in the Helius Developer Hub" },
+            { name: "Dedicated RPC Service", price: "25 SOL", description: "Your own dedicated Solana RPC node" }
+        ]
+    },
+    {
+        name: "Jupiter Trading Plaza",
+        description: "A bustling marketplace where Jupiter aggregates liquidity, providing the best swap routes across all Solana exchanges.",
+        position: new THREE.Vector3(-20, 0, 20),
+        color: 0xFFA500,
+        website: "https://jup.ag/",
+        zone: "Commercial District",
+        type: "commercial",
+        height: 15,
+        width: 20,
+        depth: 15,
+        items: [
+            { name: "Token Swap Service", price: "6 SOL", description: "Premium access to optimized swap routes" },
+            { name: "Trading Terminal Rental", price: "14 SOL", description: "Rent a professional trading terminal" },
+            { name: "Liquidity Provider License", price: "9 SOL", description: "Become an official Jupiter liquidity provider" }
+        ]
+    },
+    {
+        name: "Marinade Staking Center",
+        description: "A modern facility where Marinade offers liquid staking services for Solana, allowing users to stake SOL while maintaining liquidity.",
+        position: new THREE.Vector3(0, 0, -30),
+        color: 0x9370DB,
+        website: "https://marinade.finance/",
+        zone: "Financial District",
+        type: "commercial",
+        height: 18,
+        width: 14,
+        depth: 14,
+        items: [
+            { name: "Staking Account", price: "4 SOL", description: "Open a liquid staking account with Marinade" },
+            { name: "Yield Optimization Service", price: "5 SOL", description: "Professional management of your staking rewards" },
+            { name: "mSOL Conversion", price: "2 SOL", description: "Convert your SOL to mSOL for additional benefits" }
+        ]
+    },
+    {
+        name: "Pyth Oracle Headquarters",
+        description: "The central hub of Pyth Network, a first-party financial oracle network delivering real-time market data to the DeFi ecosystem.",
+        position: new THREE.Vector3(0, 0, 30),
+        color: 0xFFD700,
+        website: "https://pyth.network/",
+        zone: "Data District",
+        type: "infrastructure",
+        height: 25,
+        width: 15,
+        depth: 15,
+        items: [
+            { name: "Data Feed Subscription", price: "18 SOL", description: "Access to premium financial data feeds" },
+            { name: "Price Prediction Service", price: "22 SOL", description: "AI-powered price prediction for your portfolio" },
+            { name: "Oracle Integration Package", price: "11 SOL", description: "Professional integration of Pyth oracles into your dApp" }
+        ]
+    },
+    {
+        name: "Central Plaza",
+        description: "The heart of Solana City, featuring a magnificent SOL statue and information boards with the latest blockchain news.",
+        position: new THREE.Vector3(0, 0, 0),
+        color: 0x14F195,
+        website: "https://solana.com",
+        zone: "Downtown District",
+        type: "public",
+        height: 5,
+        width: 30,
+        depth: 30,
+        items: [
+            { name: "City Tour", price: "1 SOL", description: "Guided tour of Solana City's main attractions" },
+            { name: "Information Services", price: "Free", description: "Get the latest updates on Solana ecosystem" },
+            { name: "SOL Statue Souvenir", price: "0.5 SOL", description: "Miniature replica of the Central Plaza SOL statue" }
+        ]
+    },
+    {
+        name: "Residential Towers",
+        description: "Luxury apartments for Solana City residents, with stunning views of the blockchain district.",
+        position: new THREE.Vector3(35, 0, 0),
+        color: 0x4682B4,
+        website: "#",
+        zone: "Residential District",
+        type: "residential",
+        height: 40,
+        width: 15,
+        depth: 15,
+        items: [
+            { name: "Studio Apartment", price: "50 SOL/month", description: "Compact living space for individuals" },
+            { name: "Two Bedroom Apartment", price: "100 SOL/month", description: "Spacious apartment with city views" },
+            { name: "Penthouse Suite", price: "300 SOL/month", description: "Luxury living at the top of Solana City" }
+        ]
+    },
+    {
+        name: "NFT Gallery",
+        description: "A prestigious art space showcasing the finest NFT collections on Solana.",
+        position: new THREE.Vector3(-35, 0, 0),
+        color: 0xE42575,
+        website: "#",
+        zone: "Arts District",
+        type: "cultural",
+        height: 12,
+        width: 25,
+        depth: 15,
+        items: [
+            { name: "Gallery Admission", price: "2 SOL", description: "Access to all current exhibitions" },
+            { name: "NFT Minting Service", price: "5 SOL", description: "Create your own NFT with professional assistance" },
+            { name: "Private Viewing Room", price: "10 SOL", description: "Exclusive access to rare NFT collections" }
+        ]
+    }
+];
+
+let cityBuildings = [];
+let currentBuilding = null;
 
 // DOM elements
-const scoreElement = document.getElementById('score');
-const healthElement = document.getElementById('health');
-const gameOverElement = document.getElementById('game-over');
-const restartButton = document.getElementById('restart');
-const weaponInfoElement = document.getElementById('weapon-info');
-const ammoElement = document.createElement('div');
-ammoElement.id = 'ammo';
-ammoElement.style.position = 'absolute';
-ammoElement.style.bottom = '10px';
-ammoElement.style.right = '10px';
-ammoElement.style.color = 'white';
-ammoElement.style.fontSize = '24px';
-document.body.appendChild(ammoElement);
-
-// Gun definitions
-const guns = {
-    pistol: {
-        name: 'Pistol',
-        damage: 25,
-        fireRate: 300,
-        recoil: 0.03,
-        recovery: 0.01,
-        spread: 0.01,
-        ammo: 12,
-        maxAmmo: 12,
-        totalAmmo: 60,
-        reloadTime: 1000,
-        fireMode: 'single',
-        model: null
-    },
-    assault: {
-        name: 'Assault Rifle',
-        damage: 15,
-        fireRate: 100,
-        recoil: 0.05,
-        recovery: 0.005,
-        spread: 0.02,
-        ammo: 30,
-        maxAmmo: 30,
-        totalAmmo: 120,
-        reloadTime: 2000,
-        fireMode: 'auto',
-        model: null
-    },
-    shotgun: {
-        name: 'Shotgun',
-        damage: 10,
-        fireRate: 800,
-        recoil: 0.1,
-        recovery: 0.02,
-        spread: 0.1,
-        ammo: 8,
-        maxAmmo: 8,
-        totalAmmo: 32,
-        reloadTime: 2500,
-        fireMode: 'single',
-        pellets: 8,
-        model: null
-    }
-};
+const locationInfoElement = document.getElementById('location-info');
+const buildingInfoElement = document.getElementById('protocol-info');
+const buildingNameElement = buildingInfoElement.querySelector('h2');
+const buildingDescElement = buildingInfoElement.querySelector('p');
+const visitButtonElement = document.getElementById('visit-button');
+const zoneIndicatorElement = document.getElementById('zone-indicator');
+const cityInfoPanelElement = document.getElementById('city-info-panel');
 
 // Initialize the game
 function init() {
     // Reset game state
-    score = 0;
-    health = 100;
     isGameOver = false;
-    bullets = [];
-    targets = [];
-    planets = [];
-    
-    // Reset gun state
-    currentGun = 'assault';
-    fireMode = guns[currentGun].fireMode;
-    ammo = guns[currentGun].ammo;
-    maxAmmo = guns[currentGun].maxAmmo;
-    totalAmmo = guns[currentGun].totalAmmo;
-    isReloading = false;
-    
-    // Update UI
-    scoreElement.textContent = `Score: ${score}`;
-    healthElement.textContent = `Health: ${health}`;
-    updateAmmoDisplay();
-    updateWeaponInfoDisplay();
-    gameOverElement.style.display = 'none';
-    restartButton.style.display = 'none';
     
     // Create scene
     scene = new THREE.Scene();
-    scene.background = createStarBackground();
+    scene.background = new THREE.Color(0x1a2b3c); // Dark blue city sky
+    
+    // Create fog for atmosphere
+    scene.fog = new THREE.FogExp2(0x1a2b3c, 0.008);
     
     // Create camera
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 5;
-    camera.position.y = 2;
+    camera.position.y = 1.7; // Eye level for a person
     
     // Create renderer
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.body.appendChild(renderer.domElement);
     
     // Add lights
-    const ambientLight = new THREE.AmbientLight(0x404040);
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.7);
     scene.add(ambientLight);
     
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-    directionalLight.position.set(1, 1, 1);
+    directionalLight.position.set(50, 100, 50);
     directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 500;
+    directionalLight.shadow.camera.left = -100;
+    directionalLight.shadow.camera.right = 100;
+    directionalLight.shadow.camera.top = 100;
+    directionalLight.shadow.camera.bottom = -100;
     scene.add(directionalLight);
     
-    // Create player (invisible container for camera and gun)
+    // Add city lights
+    const cityLightColor = 0x14F195; // Solana green
+    const cityLight1 = new THREE.PointLight(cityLightColor, 1, 100);
+    cityLight1.position.set(30, 20, 30);
+    scene.add(cityLight1);
+    
+    const cityLight2 = new THREE.PointLight(0xE42575, 1, 100); // Solana pink
+    cityLight2.position.set(-30, 20, -30);
+    scene.add(cityLight2);
+    
+    const cityLight3 = new THREE.PointLight(0xFFD700, 1, 100); // Gold
+    cityLight3.position.set(-30, 20, 30);
+    scene.add(cityLight3);
+    
+    const cityLight4 = new THREE.PointLight(0x00BFFF, 1, 100); // Blue
+    cityLight4.position.set(30, 20, -30);
+    scene.add(cityLight4);
+    
+    // Create player (invisible container for camera and character)
     player = new THREE.Object3D();
     player.position.set(0, 0, 0);
     scene.add(player);
     
-    // Create gun
-    createGun();
+    // Create character (visible representation of player)
+    createCharacter();
     
-    // Create planets
-    createPlanets(6);
+    // Create city ground
+    createCityGround();
     
-    // Setup raycaster for shooting
+    // Create skybox
+    createSkybox();
+    
+    // Create city buildings
+    createCityBuildings();
+    
+    // Create roads
+    createRoads();
+    
+    // Create central plaza
+    createCentralPlaza();
+    
+    // Create street furniture (benches, lamp posts, etc.)
+    createStreetFurniture();
+    
+    // Setup raycaster for interaction
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
     
+    // Initialize footstep sound
+    footstepSound = document.getElementById('footstep-sound');
+    
+    // Initialize mini-map
+    initMinimap();
+    
     // Add event listeners
     window.addEventListener('resize', onWindowResize);
-    window.addEventListener('click', onMouseClick);
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('click', onClick);
     
-    // Create targets
-    createTargets(10);
+    // Set up visit button event
+    visitButtonElement.addEventListener('click', () => {
+        if (currentBuilding) {
+            if (currentBuilding.name === "Solana Shop") {
+                // Special interaction for Solana Shop
+                const currentText = locationInfoElement.textContent;
+                locationInfoElement.textContent = "Entering the Solana Shop...";
+                
+                // Teleport player inside the shop
+                const shopPosition = new THREE.Vector3(
+                    currentBuilding.position.x,
+                    player.position.y,
+                    currentBuilding.position.z + 3
+                );
+                player.position.copy(shopPosition);
+                
+                // Face the interior
+                player.rotation.y = Math.PI;
+                
+                setTimeout(() => {
+                    locationInfoElement.textContent = currentText;
+                }, 2000);
+            } else {
+                // For other buildings, open their website
+                window.open(currentBuilding.website, '_blank');
+            }
+        }
+    });
+    
+    // Show city info panel
+    cityInfoPanelElement.style.display = 'block';
     
     // Start animation loop
     animate();
 }
 
-// Update ammo display
-function updateAmmoDisplay() {
-    ammoElement.textContent = `${ammo} / ${totalAmmo}`;
+// Create character model
+function createCharacter() {
+    // Create a first-person perspective character (just hands)
+    const characterGroup = new THREE.Group();
     
-    // Change color based on ammo level
-    if (ammo === 0) {
-        ammoElement.style.color = 'red';
-    } else if (ammo <= maxAmmo * 0.3) {
-        ammoElement.style.color = 'orange';
-    } else {
-        ammoElement.style.color = 'white';
-    }
-}
-
-// Update weapon info display
-function updateWeaponInfoDisplay() {
-    weaponInfoElement.textContent = `${guns[currentGun].name} | ${fireMode.charAt(0).toUpperCase() + fireMode.slice(1)}`;
-}
-
-// Create star background
-function createStarBackground() {
-    const starsGeometry = new THREE.BufferGeometry();
-    const starsMaterial = new THREE.PointsMaterial({
-        color: 0xffffff,
-        size: 1,
-        sizeAttenuation: false
-    });
+    // Arms and hands will be positioned to appear at the bottom of the screen
+    // Left arm
+    const leftArmGroup = new THREE.Group();
     
-    const starsVertices = [];
-    for (let i = 0; i < 10000; i++) {
-        const x = (Math.random() - 0.5) * 2000;
-        const y = (Math.random() - 0.5) * 2000;
-        const z = (Math.random() - 0.5) * 2000;
-        starsVertices.push(x, y, z);
-    }
+    // Left arm (upper)
+    const leftUpperArmGeometry = new THREE.CylinderGeometry(0.08, 0.07, 0.5, 8);
+    const armMaterial = new THREE.MeshStandardMaterial({ color: 0x3366ff });
+    const leftUpperArm = new THREE.Mesh(leftUpperArmGeometry, armMaterial);
+    leftUpperArm.position.set(0, -0.25, 0);
+    leftUpperArm.rotation.z = Math.PI / 12;
+    leftUpperArm.castShadow = true;
+    leftArmGroup.add(leftUpperArm);
     
-    starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+    // Left arm (lower)
+    const leftLowerArmGeometry = new THREE.CylinderGeometry(0.07, 0.06, 0.5, 8);
+    const leftLowerArm = new THREE.Mesh(leftLowerArmGeometry, armMaterial);
+    leftLowerArm.position.set(0.1, -0.5, 0);
+    leftLowerArm.rotation.z = Math.PI / 8;
+    leftLowerArm.castShadow = true;
+    leftArmGroup.add(leftLowerArm);
     
-    const stars = new THREE.Points(starsGeometry, starsMaterial);
+    // Left hand
+    const handGeometry = new THREE.SphereGeometry(0.08, 16, 16);
+    const handMaterial = new THREE.MeshStandardMaterial({ color: 0xffcc99 });
+    const leftHand = new THREE.Mesh(handGeometry, handMaterial);
+    leftHand.position.set(0.2, -0.75, 0);
+    leftHand.scale.set(1, 0.7, 0.5);
+    leftHand.castShadow = true;
+    leftArmGroup.add(leftHand);
     
-    // Create a cube texture for the background
-    const cubeTextureLoader = new THREE.CubeTextureLoader();
-    const cubeTexture = cubeTextureLoader.load([
-        createStarCanvas(),
-        createStarCanvas(),
-        createStarCanvas(),
-        createStarCanvas(),
-        createStarCanvas(),
-        createStarCanvas()
-    ]);
+    // Left fingers
+    const fingerGeometry = new THREE.CylinderGeometry(0.02, 0.015, 0.12, 8);
+    const fingerMaterial = new THREE.MeshStandardMaterial({ color: 0xffcc99 });
     
-    scene.add(stars);
-    
-    return cubeTexture;
-}
-
-// Create a canvas with stars for the background
-function createStarCanvas() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const context = canvas.getContext('2d');
-    context.fillStyle = '#000020';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw stars
-    for (let i = 0; i < 100; i++) {
-        const x = Math.random() * canvas.width;
-        const y = Math.random() * canvas.height;
-        const radius = Math.random() * 2;
-        const hue = Math.random() * 360;
-        
-        context.beginPath();
-        context.arc(x, y, radius, 0, 2 * Math.PI);
-        context.fillStyle = 'hsl(' + hue + ', 50%, 80%)';
-        context.fill();
+    // Create 4 fingers for left hand
+    for (let i = 0; i < 4; i++) {
+        const finger = new THREE.Mesh(fingerGeometry, fingerMaterial);
+        const angleOffset = (i - 1.5) * 0.15;
+        finger.position.set(0.25 + Math.sin(angleOffset) * 0.05, -0.85, Math.cos(angleOffset) * 0.05);
+        finger.rotation.z = Math.PI / 2 + angleOffset;
+        finger.castShadow = true;
+        leftArmGroup.add(finger);
     }
     
-    return canvas.toDataURL();
-}
-
-// Create gun model
-function createGun() {
-    // Gun body
-    const gunBody = new THREE.Group();
+    // Position left arm group
+    leftArmGroup.position.set(-0.3, -0.5, -0.5);
+    leftArmGroup.rotation.x = Math.PI / 6;
+    characterGroup.add(leftArmGroup);
     
-    // Main body (rectangle)
-    const bodyGeometry = new THREE.BoxGeometry(0.2, 0.3, 1);
-    const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 });
-    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.position.z = -0.5;
-    gunBody.add(body);
+    // Right arm
+    const rightArmGroup = new THREE.Group();
     
-    // Barrel
-    const barrelGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.7, 16);
-    const barrelMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
-    const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.z = -1.1;
-    gunBody.add(barrel);
+    // Right arm (upper)
+    const rightUpperArmGeometry = new THREE.CylinderGeometry(0.08, 0.07, 0.5, 8);
+    const rightUpperArm = new THREE.Mesh(rightUpperArmGeometry, armMaterial);
+    rightUpperArm.position.set(0, -0.25, 0);
+    rightUpperArm.rotation.z = -Math.PI / 12;
+    rightUpperArm.castShadow = true;
+    rightArmGroup.add(rightUpperArm);
     
-    // Handle
-    const handleGeometry = new THREE.BoxGeometry(0.15, 0.4, 0.2);
-    const handleMaterial = new THREE.MeshStandardMaterial({ color: 0x222222 });
-    const handle = new THREE.Mesh(handleGeometry, handleMaterial);
-    handle.position.y = -0.35;
-    handle.position.z = -0.4;
-    gunBody.add(handle);
+    // Right arm (lower)
+    const rightLowerArmGeometry = new THREE.CylinderGeometry(0.07, 0.06, 0.5, 8);
+    const rightLowerArm = new THREE.Mesh(rightLowerArmGeometry, armMaterial);
+    rightLowerArm.position.set(-0.1, -0.5, 0);
+    rightLowerArm.rotation.z = -Math.PI / 8;
+    rightLowerArm.castShadow = true;
+    rightArmGroup.add(rightLowerArm);
     
-    // Sight
-    const sightGeometry = new THREE.BoxGeometry(0.05, 0.1, 0.05);
-    const sightMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-    const sight = new THREE.Mesh(sightGeometry, sightMaterial);
-    sight.position.y = 0.2;
-    sight.position.z = -0.2;
-    gunBody.add(sight);
+    // Right hand
+    const rightHand = new THREE.Mesh(handGeometry, handMaterial);
+    rightHand.position.set(-0.2, -0.75, 0);
+    rightHand.scale.set(1, 0.7, 0.5);
+    rightHand.castShadow = true;
+    rightArmGroup.add(rightHand);
     
-    // Magazine
-    const magGeometry = new THREE.BoxGeometry(0.15, 0.3, 0.2);
-    const magMaterial = new THREE.MeshStandardMaterial({ color: 0x111111 });
-    const magazine = new THREE.Mesh(magGeometry, magMaterial);
-    magazine.position.y = -0.3;
-    magazine.position.z = -0.6;
-    gunBody.add(magazine);
+    // Right fingers
+    for (let i = 0; i < 4; i++) {
+        const finger = new THREE.Mesh(fingerGeometry, fingerMaterial);
+        const angleOffset = (i - 1.5) * 0.15;
+        finger.position.set(-0.25 - Math.sin(angleOffset) * 0.05, -0.85, Math.cos(angleOffset) * 0.05);
+        finger.rotation.z = -Math.PI / 2 - angleOffset;
+        finger.castShadow = true;
+        rightArmGroup.add(finger);
+    }
     
-    // Position the gun in front of the camera
-    gunBody.position.set(0.3, -0.3, -0.5);
+    // Position right arm group
+    rightArmGroup.position.set(0.3, -0.5, -0.5);
+    rightArmGroup.rotation.x = Math.PI / 6;
+    characterGroup.add(rightArmGroup);
     
-    // Store original position for recoil
-    gunBody.userData.originalPosition = gunBody.position.clone();
-    
-    // Add gun to player
-    player.add(gunBody);
-    gun = gunBody;
+    // Add character to player
+    player.add(characterGroup);
+    character = characterGroup;
     
     // Add camera to player
     player.add(camera);
-    
-    // Store gun models
-    guns.assault.model = gunBody;
 }
 
-// Create planets
-function createPlanets(count) {
-    const planetTextures = [
-        { color: 0xff9933, emissive: 0x220000 }, // Mars-like
-        { color: 0x99ccff, emissive: 0x001133 }, // Earth-like
-        { color: 0xffcc99, emissive: 0x332200 }, // Venus-like
-        { color: 0xffff99, emissive: 0x333300 }, // Saturn-like
-        { color: 0x99ff99, emissive: 0x003300 }, // Alien planet
-        { color: 0xcc99ff, emissive: 0x220033 }  // Purple planet
-    ];
+// Create city ground
+function createCityGround() {
+    // Create city base
+    const groundSize = 200;
+    const floorGeometry = new THREE.PlaneGeometry(groundSize, groundSize);
+    const floorMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x333333, // Dark asphalt color
+        roughness: 0.8,
+        metalness: 0.3
+    });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
     
-    for (let i = 0; i < count; i++) {
-        // Random size
-        const radius = 5 + Math.random() * 15;
+    // Add grid pattern to represent city blocks
+    const gridSize = 20;
+    const gridLineWidth = 0.2;
+    const gridMaterial = new THREE.MeshStandardMaterial({
+        color: 0x444444,
+        roughness: 0.7,
+        metalness: 0.4
+    });
+    
+    // Create horizontal grid lines
+    for (let i = -groundSize/2; i <= groundSize/2; i += gridSize) {
+        if (i === 0) continue; // Skip center lines as they'll be main roads
         
-        // Create planet geometry
-        const planetGeometry = new THREE.SphereGeometry(radius, 32, 32);
+        const gridLineGeometry = new THREE.PlaneGeometry(groundSize, gridLineWidth);
+        const gridLine = new THREE.Mesh(gridLineGeometry, gridMaterial);
+        gridLine.rotation.x = -Math.PI / 2;
+        gridLine.position.set(0, 0.01, i);
+        gridLine.receiveShadow = true;
+        scene.add(gridLine);
+    }
+    
+    // Create vertical grid lines
+    for (let i = -groundSize/2; i <= groundSize/2; i += gridSize) {
+        if (i === 0) continue; // Skip center lines as they'll be main roads
         
-        // Choose a random texture
-        const textureIndex = Math.floor(Math.random() * planetTextures.length);
-        const planetMaterial = new THREE.MeshStandardMaterial({
-            color: planetTextures[textureIndex].color,
-            emissive: planetTextures[textureIndex].emissive,
+        const gridLineGeometry = new THREE.PlaneGeometry(gridLineWidth, groundSize);
+        const gridLine = new THREE.Mesh(gridLineGeometry, gridMaterial);
+        gridLine.rotation.x = -Math.PI / 2;
+        gridLine.position.set(i, 0.01, 0);
+        gridLine.receiveShadow = true;
+        scene.add(gridLine);
+    }
+    
+    // Add some variation to the ground with scattered details
+    for (let i = 0; i < 200; i++) {
+        const detailSize = 0.5 + Math.random() * 2;
+        const detailGeometry = new THREE.PlaneGeometry(detailSize, detailSize);
+        const detailMaterial = new THREE.MeshStandardMaterial({
+            color: 0x222222 + Math.random() * 0x111111,
+            roughness: 0.9,
+            metalness: 0.2
+        });
+        const detail = new THREE.Mesh(detailGeometry, detailMaterial);
+        detail.rotation.x = -Math.PI / 2;
+        detail.position.set(
+            (Math.random() - 0.5) * groundSize,
+            0.011,
+            (Math.random() - 0.5) * groundSize
+        );
+        detail.receiveShadow = true;
+        scene.add(detail);
+    }
+}
+
+// Create skybox
+function createSkybox() {
+    // Implement skybox creation logic here
+}
+
+// Create city buildings
+function createCityBuildings() {
+    buildings.forEach(building => {
+        // Create building base
+        const buildingGroup = new THREE.Group();
+        
+        // Stall platform
+        const platformGeometry = new THREE.BoxGeometry(building.width, building.height, building.depth);
+        const platformMaterial = new THREE.MeshStandardMaterial({ 
+            color: building.color,
+            roughness: 0.9,
+            metalness: 0.1
+        });
+        const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+        platform.position.y = 0.5;
+        platform.receiveShadow = true;
+        buildingGroup.add(platform);
+        
+        // Add decorative platform border
+        const borderGeometry = new THREE.BoxGeometry(building.width + 0.4, 0.2, building.depth + 0.4);
+        const borderMaterial = new THREE.MeshStandardMaterial({ 
+            color: building.color,
+            roughness: 0.7,
+            metalness: 0.3,
+            emissive: building.color,
+            emissiveIntensity: 0.2
+        });
+        const platformBorder = new THREE.Mesh(borderGeometry, borderMaterial);
+        platformBorder.position.y = 0.1;
+        platformBorder.receiveShadow = true;
+        buildingGroup.add(platformBorder);
+        
+        // Add carpet/rug with Solana pattern
+        const carpetGeometry = new THREE.CircleGeometry(3, 32);
+        const carpetMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x222222,
+            roughness: 0.9,
+            metalness: 0.1
+        });
+        const carpet = new THREE.Mesh(carpetGeometry, carpetMaterial);
+        carpet.rotation.x = -Math.PI / 2;
+        carpet.position.y = 0.51;
+        carpet.receiveShadow = true;
+        buildingGroup.add(carpet);
+        
+        // Add Solana logo pattern on carpet
+        const solanaPatternGeometry = new THREE.RingGeometry(1.5, 1.8, 32);
+        const solanaPatternMaterial = new THREE.MeshStandardMaterial({ 
+            color: building.color,
+            roughness: 0.7,
+            metalness: 0.3,
+            side: THREE.DoubleSide
+        });
+        const solanaPattern = new THREE.Mesh(solanaPatternGeometry, solanaPatternMaterial);
+        solanaPattern.rotation.x = -Math.PI / 2;
+        solanaPattern.position.y = 0.52;
+        solanaPattern.receiveShadow = true;
+        buildingGroup.add(solanaPattern);
+        
+        // Circus-themed stall counter
+        const counterGeometry = new THREE.BoxGeometry(5.5, 1.2, 1.8);
+        const counterMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xDEB887,
             roughness: 0.7,
             metalness: 0.2
         });
+        const counter = new THREE.Mesh(counterGeometry, counterMaterial);
+        counter.position.set(0, 1.1, 1.5);
+        counter.castShadow = true;
+        counter.receiveShadow = true;
+        buildingGroup.add(counter);
         
-        // Create planet mesh
-        const planet = new THREE.Mesh(planetGeometry, planetMaterial);
+        // Add wood grain texture to counter
+        const counterDetailGeometry = new THREE.BoxGeometry(5.5, 1.2, 0.05);
+        const counterDetailMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xA0522D,
+            roughness: 0.9,
+            metalness: 0.1
+        });
         
-        // Random position (far from origin)
-        let x, y, z;
-        do {
-            x = (Math.random() - 0.5) * 500;
-            y = (Math.random() - 0.5) * 500;
-            z = (Math.random() - 0.5) * 500;
-        } while (Math.sqrt(x*x + y*y + z*z) < 100); // Ensure planets are not too close to origin
+        // Front panel of counter
+        const counterFrontPanel = new THREE.Mesh(counterDetailGeometry, counterDetailMaterial);
+        counterFrontPanel.position.set(0, 1.1, 2.4);
+        counterFrontPanel.castShadow = true;
+        buildingGroup.add(counterFrontPanel);
         
-        planet.position.set(x, y, z);
+        // Add decorative trim to counter
+        const trimGeometry = new THREE.BoxGeometry(5.7, 0.1, 2);
+        const trimMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x5D4037,
+            roughness: 0.7,
+            metalness: 0.3
+        });
+        const counterTrim = new THREE.Mesh(trimGeometry, trimMaterial);
+        counterTrim.position.set(0, 0.55, 1.5);
+        counterTrim.castShadow = true;
+        buildingGroup.add(counterTrim);
         
-        // Add rings to some planets
-        if (Math.random() > 0.6) {
-            const ringGeometry = new THREE.RingGeometry(radius + 2, radius + 5, 32);
-            const ringMaterial = new THREE.MeshStandardMaterial({
-                color: 0xffffff,
+        // Counter top decoration
+        const counterTopGeometry = new THREE.BoxGeometry(5.7, 0.1, 2);
+        const counterTopMaterial = new THREE.MeshStandardMaterial({ 
+            color: building.color,
+            roughness: 0.5,
+            metalness: 0.5
+        });
+        const counterTop = new THREE.Mesh(counterTopGeometry, counterTopMaterial);
+        counterTop.position.set(0, 1.7, 1.5);
+        counterTop.castShadow = true;
+        counterTop.receiveShadow = true;
+        buildingGroup.add(counterTop);
+        
+        // Add decorative cloth/banner hanging from counter
+        const clothGeometry = new THREE.PlaneGeometry(5, 0.8);
+        const clothMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xFFFFFF,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.9
+        });
+        const counterCloth = new THREE.Mesh(clothGeometry, clothMaterial);
+        counterCloth.position.set(0, 0.9, 2.35);
+        counterCloth.castShadow = true;
+        buildingGroup.add(counterCloth);
+        
+        // Add protocol name to the cloth banner
+        const bannerDetailGeometry = new THREE.PlaneGeometry(4, 0.5);
+        const bannerDetailMaterial = new THREE.MeshStandardMaterial({ 
+            color: building.color,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.9
+        });
+        const bannerDetail = new THREE.Mesh(bannerDetailGeometry, bannerDetailMaterial);
+        bannerDetail.position.set(0, 0.9, 2.36);
+        bannerDetail.castShadow = true;
+        buildingGroup.add(bannerDetail);
+        
+        // Circus-themed stall roof (striped tent)
+        const roofGeometry = new THREE.ConeGeometry(4.5, 3.5, 16);
+        const roofMaterial = new THREE.MeshStandardMaterial({ 
+            color: building.color,
+            roughness: 0.7,
+            metalness: 0.3
+        });
+        const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+        roof.position.y = 5.5;
+        roof.castShadow = true;
+        buildingGroup.add(roof);
+        
+        // Roof stripes
+        for (let i = 0; i < 16; i++) {
+            const angle = (i / 16) * Math.PI * 2;
+            const stripeGeometry = new THREE.PlaneGeometry(0.5, 3.5);
+            const stripeMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xFFFFFF,
                 side: THREE.DoubleSide,
                 transparent: true,
-                opacity: 0.5
+                opacity: 0.9
             });
-            const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-            ring.rotation.x = Math.PI / 2;
-            planet.add(ring);
+            const stripe = new THREE.Mesh(stripeGeometry, stripeMaterial);
+            
+            // Position stripe on the cone
+            const radius = 2.25; // Half the base diameter of the cone
+            stripe.position.set(
+                Math.cos(angle) * radius,
+                4, // Middle of the cone height
+                Math.sin(angle) * radius
+            );
+            
+            // Rotate to face center and tilt to match cone slope
+            stripe.lookAt(new THREE.Vector3(0, 5.5, 0));
+            stripe.rotation.x += Math.PI / 2;
+            
+            roof.add(stripe);
         }
         
-        // Add moons to some planets
-        if (Math.random() > 0.5) {
-            const moonCount = Math.floor(Math.random() * 3) + 1;
-            for (let j = 0; j < moonCount; j++) {
-                const moonRadius = radius * 0.2;
-                const moonGeometry = new THREE.SphereGeometry(moonRadius, 16, 16);
-                const moonMaterial = new THREE.MeshStandardMaterial({
-                    color: 0xcccccc,
-                    roughness: 0.8
+        // Add decorative roof trim
+        const roofTrimGeometry = new THREE.TorusGeometry(4.5, 0.2, 16, 32);
+        const roofTrimMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xFFD700,
+            roughness: 0.3,
+            metalness: 0.7,
+            emissive: 0xFFD700,
+            emissiveIntensity: 0.3
+        });
+        const roofTrim = new THREE.Mesh(roofTrimGeometry, roofTrimMaterial);
+        roofTrim.position.y = 3.8;
+        roofTrim.rotation.x = Math.PI / 2;
+        roofTrim.castShadow = true;
+        buildingGroup.add(roofTrim);
+        
+        // Roof flag
+        const flagPoleGeometry = new THREE.CylinderGeometry(0.05, 0.05, 1.5, 8);
+        const flagPoleMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xCCCCCC,
+            roughness: 0.3,
+            metalness: 0.8
+        });
+        const flagPole = new THREE.Mesh(flagPoleGeometry, flagPoleMaterial);
+        flagPole.position.y = 7.5;
+        flagPole.castShadow = true;
+        buildingGroup.add(flagPole);
+        
+        const flagGeometry = new THREE.PlaneGeometry(1, 0.5);
+        const flagMaterial = new THREE.MeshStandardMaterial({ 
+            color: building.color,
+            side: THREE.DoubleSide,
+            emissive: building.color,
+            emissiveIntensity: 0.3
+        });
+        const flag = new THREE.Mesh(flagGeometry, flagMaterial);
+        flag.position.set(0.5, 8.2, 0);
+        // Add some wave animation to the flag
+        flag.rotation.y = Math.PI / 2;
+        flag.rotation.x = Math.PI / 12 * Math.sin(Date.now() * 0.001);
+        flag.castShadow = true;
+        buildingGroup.add(flag);
+        
+        // Stall back wall
+        const backWallGeometry = new THREE.BoxGeometry(6, 4, 0.2);
+        const backWallMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xf0f0f0,
+            roughness: 0.8,
+            metalness: 0.1
+        });
+        const backWall = new THREE.Mesh(backWallGeometry, backWallMaterial);
+        backWall.position.set(0, 2.5, -2.5);
+        backWall.castShadow = true;
+        backWall.receiveShadow = true;
+        buildingGroup.add(backWall);
+        
+        // Add decorative patterns to back wall
+        const wallPatternGeometry = new THREE.PlaneGeometry(5.5, 3.5);
+        const wallPatternMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xF5F5F5,
+            roughness: 0.8,
+            metalness: 0.1,
+            side: THREE.DoubleSide
+        });
+        const wallPattern = new THREE.Mesh(wallPatternGeometry, wallPatternMaterial);
+        wallPattern.position.set(0, 2.5, -2.4);
+        wallPattern.castShadow = true;
+        buildingGroup.add(wallPattern);
+        
+        // Add protocol-themed decorative elements to back wall
+        const decorSize = 0.5;
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 2; j++) {
+                const decorGeometry = new THREE.CircleGeometry(decorSize, 16);
+                const decorMaterial = new THREE.MeshStandardMaterial({ 
+                    color: building.color,
+                    roughness: 0.5,
+                    metalness: 0.5,
+                    emissive: building.color,
+                    emissiveIntensity: 0.2
                 });
-                const moon = new THREE.Mesh(moonGeometry, moonMaterial);
-                
-                // Create a container for the moon to orbit around the planet
-                const moonOrbit = new THREE.Object3D();
-                moonOrbit.rotation.x = Math.random() * Math.PI;
-                moonOrbit.rotation.y = Math.random() * Math.PI;
-                
-                // Position the moon
-                moon.position.set(radius + 8, 0, 0);
-                
-                // Add moon to orbit container
-                moonOrbit.add(moon);
-                
-                // Add orbit to planet
-                planet.add(moonOrbit);
-                
-                // Store the rotation speed
-                moonOrbit.userData.rotationSpeed = 0.01 + Math.random() * 0.02;
+                const decor = new THREE.Mesh(decorGeometry, decorMaterial);
+                decor.position.set(-2 + i * 2, 1.5 + j * 2, -2.39);
+                decor.castShadow = true;
+                buildingGroup.add(decor);
             }
         }
         
-        // Store rotation speed
-        planet.userData.rotationSpeed = 0.001 + Math.random() * 0.002;
+        // Stall side walls
+        const sideWallGeometry = new THREE.BoxGeometry(0.2, 4, 5);
         
-        scene.add(planet);
-        planets.push(planet);
-    }
+        const leftWall = new THREE.Mesh(sideWallGeometry, backWallMaterial);
+        leftWall.position.set(-3, 2.5, -0.5);
+        leftWall.castShadow = true;
+        leftWall.receiveShadow = true;
+        buildingGroup.add(leftWall);
+        
+        const rightWall = new THREE.Mesh(sideWallGeometry, backWallMaterial);
+        rightWall.position.set(3, 2.5, -0.5);
+        rightWall.castShadow = true;
+        rightWall.receiveShadow = true;
+        buildingGroup.add(rightWall);
+        
+        // Add decorative trim to walls
+        const wallTrimGeometry = new THREE.BoxGeometry(6.4, 0.2, 0.1);
+        const wallTrimMaterial = new THREE.MeshStandardMaterial({ 
+            color: building.color,
+            roughness: 0.5,
+            metalness: 0.5
+        });
+        
+        // Top trim for back wall
+        const backWallTopTrim = new THREE.Mesh(wallTrimGeometry, wallTrimMaterial);
+        backWallTopTrim.position.set(0, 4.5, -2.5);
+        backWallTopTrim.castShadow = true;
+        buildingGroup.add(backWallTopTrim);
+        
+        // Bottom trim for back wall
+        const backWallBottomTrim = new THREE.Mesh(wallTrimGeometry, wallTrimMaterial);
+        backWallBottomTrim.position.set(0, 0.5, -2.5);
+        backWallBottomTrim.castShadow = true;
+        buildingGroup.add(backWallBottomTrim);
+        
+        // Side wall trims
+        const sideWallTrimGeometry = new THREE.BoxGeometry(0.1, 0.2, 5);
+        
+        // Left wall trims
+        const leftWallTopTrim = new THREE.Mesh(sideWallTrimGeometry, wallTrimMaterial);
+        leftWallTopTrim.position.set(-3, 4.5, -0.5);
+        leftWallTopTrim.castShadow = true;
+        buildingGroup.add(leftWallTopTrim);
+        
+        const leftWallBottomTrim = new THREE.Mesh(sideWallTrimGeometry, wallTrimMaterial);
+        leftWallBottomTrim.position.set(-3, 0.5, -0.5);
+        leftWallBottomTrim.castShadow = true;
+        buildingGroup.add(leftWallBottomTrim);
+        
+        // Right wall trims
+        const rightWallTopTrim = new THREE.Mesh(sideWallTrimGeometry, wallTrimMaterial);
+        rightWallTopTrim.position.set(3, 4.5, -0.5);
+        rightWallTopTrim.castShadow = true;
+        buildingGroup.add(rightWallTopTrim);
+        
+        const rightWallBottomTrim = new THREE.Mesh(sideWallTrimGeometry, wallTrimMaterial);
+        rightWallBottomTrim.position.set(3, 0.5, -0.5);
+        rightWallBottomTrim.castShadow = true;
+        buildingGroup.add(rightWallBottomTrim);
+        
+        // Protocol sign
+        const signGeometry = new THREE.PlaneGeometry(5, 1.2);
+        const signMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xffffff,
+            side: THREE.DoubleSide
+        });
+        const sign = new THREE.Mesh(signGeometry, signMaterial);
+        sign.position.set(0, 4, -2.4);
+        sign.castShadow = true;
+        buildingGroup.add(sign);
+        
+        // Add sign border
+        const signBorderGeometry = new THREE.BoxGeometry(5.2, 1.4, 0.05);
+        const signBorderMaterial = new THREE.MeshStandardMaterial({ 
+            color: building.color,
+            roughness: 0.5,
+            metalness: 0.5,
+            emissive: building.color,
+            emissiveIntensity: 0.3
+        });
+        const signBorder = new THREE.Mesh(signBorderGeometry, signBorderMaterial);
+        signBorder.position.set(0, 4, -2.45);
+        signBorder.castShadow = true;
+        buildingGroup.add(signBorder);
+        
+        // Protocol logo (simplified as a colored sphere)
+        const logoGeometry = new THREE.SphereGeometry(0.6, 24, 24);
+        const logoMaterial = new THREE.MeshStandardMaterial({ 
+            color: building.color,
+            roughness: 0.3,
+            metalness: 0.7,
+            emissive: building.color,
+            emissiveIntensity: 0.7
+        });
+        const logo = new THREE.Mesh(logoGeometry, logoMaterial);
+        logo.position.set(0, 4, -2.3);
+        logo.castShadow = true;
+        buildingGroup.add(logo);
+        
+        // Add animated glow effect to logo
+        const glowGeometry = new THREE.SphereGeometry(0.7, 24, 24);
+        const glowMaterial = new THREE.MeshBasicMaterial({ 
+            color: building.color,
+            transparent: true,
+            opacity: 0.3
+        });
+        const logoGlow = new THREE.Mesh(glowGeometry, glowMaterial);
+        logoGlow.position.copy(logo.position);
+        logoGlow.userData.initialScale = 1;
+        buildingGroup.add(logoGlow);
+        
+        // Add logo animation
+        logo.userData.rotationSpeed = 0.005;
+        logoGlow.userData.pulseSpeed = 0.003;
+        
+        // Create shop items display
+        if (building.items && building.items.length > 0) {
+            // Display items on the counter
+            building.items.forEach((item, index) => {
+                // Item base (like a small box or display stand)
+                const itemBaseGeometry = new THREE.CylinderGeometry(0.6, 0.7, 0.1, 16);
+                const itemBaseMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x333333,
+                    roughness: 0.5,
+                    metalness: 0.5
+                });
+                const itemBase = new THREE.Mesh(itemBaseGeometry, itemBaseMaterial);
+                
+                // Position items along the counter
+                const xPos = (index - 1) * 1.5;
+                itemBase.position.set(xPos, 1.75, 1.5);
+                buildingGroup.add(itemBase);
+                
+                // Create a representative item object
+                // Different geometry for each item type
+                let itemGeometry;
+                switch (index % 3) {
+                    case 0:
+                        // Book/guide
+                        itemGeometry = new THREE.BoxGeometry(0.6, 0.2, 0.8);
+                        break;
+                    case 1:
+                        // Tool/device
+                        itemGeometry = new THREE.DodecahedronGeometry(0.3, 1);
+                        break;
+                    case 2:
+                        // Certificate/token
+                        itemGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 32);
+                        break;
+                }
+                
+                const itemMaterial = new THREE.MeshStandardMaterial({ 
+                    color: new THREE.Color(building.color).offsetHSL(0.1 * index, 0, 0),
+                    roughness: 0.4,
+                    metalness: 0.6,
+                    emissive: building.color,
+                    emissiveIntensity: 0.4
+                });
+                
+                const itemMesh = new THREE.Mesh(itemGeometry, itemMaterial);
+                itemMesh.position.set(xPos, 2, 1.5);
+                // Add rotation animation to items
+                itemMesh.userData.rotationAxis = new THREE.Vector3(0, 1, 0).normalize();
+                itemMesh.userData.rotationSpeed = 0.01 + Math.random() * 0.01;
+                itemMesh.userData.floatSpeed = 0.001 + Math.random() * 0.001;
+                itemMesh.userData.floatHeight = 0.1 + Math.random() * 0.1;
+                itemMesh.userData.initialY = 2;
+                itemMesh.castShadow = true;
+                itemMesh.userData.item = item;
+                buildingGroup.add(itemMesh);
+                
+                // Add a small price tag
+                const priceTagGeometry = new THREE.PlaneGeometry(0.7, 0.3);
+                const priceTagMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0xFFFFFF,
+                    side: THREE.DoubleSide
+                });
+                const priceTag = new THREE.Mesh(priceTagGeometry, priceTagMaterial);
+                priceTag.position.set(xPos, 1.85, 2.1);
+                priceTag.rotation.x = -Math.PI / 4;
+                buildingGroup.add(priceTag);
+            });
+        }
+        
+        // Add decorative circus elements
+        // Pennant flags
+        for (let i = 0; i < 8; i++) {
+            const pennantGeometry = new THREE.ConeGeometry(0.2, 0.5, 3);
+            const pennantMaterial = new THREE.MeshStandardMaterial({ 
+                color: i % 2 === 0 ? building.color : 0xFFFFFF,
+                roughness: 0.7,
+                metalness: 0.3
+            });
+            const pennant = new THREE.Mesh(pennantGeometry, pennantMaterial);
+            pennant.position.set(-3.5 + i, 4.7, -2.4);
+            pennant.rotation.z = Math.PI;
+            pennant.castShadow = true;
+            buildingGroup.add(pennant);
+        }
+        
+        // Add string for pennants
+        const stringGeometry = new THREE.CylinderGeometry(0.01, 0.01, 8, 8);
+        const stringMaterial = new THREE.MeshStandardMaterial({ color: 0xCCCCCC });
+        const string = new THREE.Mesh(stringGeometry, stringMaterial);
+        string.position.set(0, 4.7, 1.5);
+        buildingGroup.add(string);
+        
+        // Position the stall
+        buildingGroup.position.copy(building.position);
+        
+        // Make the stall face the center
+        buildingGroup.lookAt(new THREE.Vector3(0, 0, 0));
+        
+        // Add protocol data to the stall
+        buildingGroup.userData.protocol = building;
+        
+        // Add to scene and protocol stalls array
+        scene.add(buildingGroup);
+        cityBuildings.push(buildingGroup);
+    });
 }
 
 // Handle window resize
@@ -430,30 +1027,33 @@ function onMouseMove(event) {
     camera.rotation.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, verticalRotation));
 }
 
-// Handle mouse down
-function onMouseDown(event) {
-    if (event.button === 0) { // Left mouse button
-        isShooting = true;
-        
-        if (fireMode === 'single') {
-            shoot();
-        } else if (fireMode === 'burst') {
-            burstCount = 0;
-            shootBurst();
+// Handle click
+function onClick() {
+    if (currentBuilding) {
+        if (currentBuilding.name === "Solana Shop") {
+            // Special interaction for Solana Shop
+            const currentText = locationInfoElement.textContent;
+            locationInfoElement.textContent = "Entering the Solana Shop...";
+            
+            // Teleport player inside the shop
+            const shopPosition = new THREE.Vector3(
+                currentBuilding.position.x,
+                player.position.y,
+                currentBuilding.position.z + 3
+            );
+            player.position.copy(shopPosition);
+            
+            // Face the interior
+            player.rotation.y = Math.PI;
+            
+            setTimeout(() => {
+                locationInfoElement.textContent = currentText;
+            }, 2000);
+        } else {
+            // For other buildings, open their website
+            window.open(currentBuilding.website, '_blank');
         }
     }
-}
-
-// Handle mouse up
-function onMouseUp(event) {
-    if (event.button === 0) { // Left mouse button
-        isShooting = false;
-    }
-}
-
-// Handle mouse click (for single shot mode)
-function onMouseClick() {
-    // This is now handled by onMouseDown and onMouseUp
 }
 
 // Handle key down
@@ -474,21 +1074,6 @@ function onKeyDown(event) {
         case 'KeyD':
         case 'ArrowRight':
             moveRight = true;
-            break;
-        case 'KeyR':
-            reload();
-            break;
-        case 'KeyF':
-            toggleFireMode();
-            break;
-        case 'Digit1':
-            switchWeapon('pistol');
-            break;
-        case 'Digit2':
-            switchWeapon('assault');
-            break;
-        case 'Digit3':
-            switchWeapon('shotgun');
             break;
     }
 }
@@ -515,394 +1100,6 @@ function onKeyUp(event) {
     }
 }
 
-// Toggle fire mode
-function toggleFireMode() {
-    if (isReloading) return;
-    
-    const modes = ['single', 'burst', 'auto'];
-    const currentIndex = modes.indexOf(fireMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    fireMode = modes[nextIndex];
-    
-    // Update weapon info display
-    updateWeaponInfoDisplay();
-    
-    // Show fire mode change
-    const modeText = document.createElement('div');
-    modeText.textContent = `Fire Mode: ${fireMode.toUpperCase()}`;
-    modeText.style.position = 'absolute';
-    modeText.style.top = '50%';
-    modeText.style.left = '50%';
-    modeText.style.transform = 'translate(-50%, -50%)';
-    modeText.style.color = 'white';
-    modeText.style.fontSize = '24px';
-    modeText.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    modeText.style.padding = '10px';
-    modeText.style.borderRadius = '5px';
-    document.body.appendChild(modeText);
-    
-    setTimeout(() => {
-        document.body.removeChild(modeText);
-    }, 1000);
-}
-
-// Switch weapon
-function switchWeapon(weaponName) {
-    if (isReloading || !guns[weaponName]) return;
-    
-    // Save current ammo
-    guns[currentGun].ammo = ammo;
-    guns[currentGun].totalAmmo = totalAmmo;
-    
-    // Switch to new weapon
-    currentGun = weaponName;
-    fireMode = guns[currentGun].fireMode;
-    ammo = guns[currentGun].ammo;
-    maxAmmo = guns[currentGun].maxAmmo;
-    totalAmmo = guns[currentGun].totalAmmo;
-    fireRate = guns[currentGun].fireRate;
-    bulletSpread = guns[currentGun].spread;
-    maxRecoil = guns[currentGun].recoil;
-    recoilRecovery = guns[currentGun].recovery;
-    
-    updateAmmoDisplay();
-    updateWeaponInfoDisplay();
-    
-    // Show weapon change
-    const weaponText = document.createElement('div');
-    weaponText.textContent = `Weapon: ${guns[currentGun].name}`;
-    weaponText.style.position = 'absolute';
-    weaponText.style.top = '50%';
-    weaponText.style.left = '50%';
-    weaponText.style.transform = 'translate(-50%, -50%)';
-    weaponText.style.color = 'white';
-    weaponText.style.fontSize = '24px';
-    weaponText.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    weaponText.style.padding = '10px';
-    weaponText.style.borderRadius = '5px';
-    document.body.appendChild(weaponText);
-    
-    setTimeout(() => {
-        document.body.removeChild(weaponText);
-    }, 1000);
-}
-
-// Reload weapon
-function reload() {
-    if (isReloading || ammo === maxAmmo || totalAmmo <= 0) return;
-    
-    isReloading = true;
-    
-    // Show reloading text
-    const reloadText = document.createElement('div');
-    reloadText.textContent = 'RELOADING...';
-    reloadText.style.position = 'absolute';
-    reloadText.style.bottom = '50px';
-    reloadText.style.right = '10px';
-    reloadText.style.color = 'yellow';
-    reloadText.style.fontSize = '20px';
-    document.body.appendChild(reloadText);
-    
-    // Animate gun during reload
-    const reloadAnimation = setInterval(() => {
-        gun.rotation.x = Math.sin(Date.now() * 0.01) * 0.1;
-    }, 16);
-    
-    // Complete reload after delay
-    setTimeout(() => {
-        isReloading = false;
-        
-        // Calculate how much ammo to add
-        const ammoNeeded = maxAmmo - ammo;
-        const ammoToAdd = Math.min(ammoNeeded, totalAmmo);
-        
-        totalAmmo -= ammoToAdd;
-        ammo += ammoToAdd;
-        
-        updateAmmoDisplay();
-        document.body.removeChild(reloadText);
-        clearInterval(reloadAnimation);
-        
-        // Reset gun rotation
-        gun.rotation.x = 0;
-    }, guns[currentGun].reloadTime);
-}
-
-// Shoot burst fire
-function shootBurst() {
-    if (burstCount < burstMax) {
-        shoot();
-        burstCount++;
-        
-        setTimeout(() => {
-            if (isShooting) {
-                shootBurst();
-            }
-        }, fireRate);
-    }
-}
-
-// Shoot function
-function shoot() {
-    if (isGameOver || isReloading || !canShoot) return;
-    
-    // Check ammo
-    if (ammo <= 0) {
-        // Play empty click sound
-        playEmptySound();
-        
-        // Auto reload if out of ammo
-        if (totalAmmo > 0) {
-            reload();
-        }
-        return;
-    }
-    
-    // Rate of fire check
-    const now = Date.now();
-    if (now - lastShotTime < fireRate) return;
-    lastShotTime = now;
-    
-    // Decrease ammo
-    ammo--;
-    updateAmmoDisplay();
-    
-    // Apply recoil
-    applyRecoil();
-    
-    // Add camera shake
-    addCameraShake();
-    
-    // Create bullet(s)
-    if (currentGun === 'shotgun') {
-        // Shotgun fires multiple pellets
-        for (let i = 0; i < guns.shotgun.pellets; i++) {
-            createBullet(true);
-        }
-    } else {
-        createBullet();
-    }
-    
-    // Add muzzle flash effect
-    createMuzzleFlash();
-    
-    // Auto reload if out of ammo
-    if (ammo === 0 && totalAmmo > 0) {
-        reload();
-    }
-}
-
-// Create bullet
-function createBullet(isShotgunPellet = false) {
-    // Create bullet
-    const bulletGeometry = new THREE.SphereGeometry(0.05, 8, 8);
-    const bulletMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0xffff00,
-        emissive: 0xffff00,
-        emissiveIntensity: 1
-    });
-    const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
-    
-    // Position bullet at gun barrel
-    const bulletPosition = new THREE.Vector3(0, 0, -1.5);
-    bulletPosition.applyQuaternion(gun.quaternion);
-    bulletPosition.add(gun.getWorldPosition(new THREE.Vector3()));
-    bullet.position.copy(bulletPosition);
-    
-    // Set bullet direction based on player's orientation with spread
-    const spread = isShotgunPellet ? bulletSpread * 2 : bulletSpread;
-    bullet.userData.direction = new THREE.Vector3(
-        (Math.random() - 0.5) * spread,
-        (Math.random() - 0.5) * spread,
-        -1
-    );
-    bullet.userData.direction.normalize();
-    bullet.userData.direction.applyQuaternion(player.quaternion);
-    
-    // Set bullet damage
-    bullet.userData.damage = guns[currentGun].damage;
-    
-    // Add bullet light
-    const bulletLight = new THREE.PointLight(0xffff00, 1, 5);
-    bullet.add(bulletLight);
-    
-    // Add bullet to scene and bullets array
-    scene.add(bullet);
-    bullets.push(bullet);
-}
-
-// Apply recoil to gun and camera
-function applyRecoil() {
-    // Add recoil to gun position
-    recoilAmount = maxRecoil;
-    
-    // Apply recoil to gun position
-    gun.position.z = gun.userData.originalPosition.z + recoilAmount;
-}
-
-// Add camera shake
-function addCameraShake() {
-    const intensity = maxRecoil * 10;
-    camera.rotation.x += (Math.random() - 0.5) * intensity;
-    camera.rotation.y += (Math.random() - 0.5) * intensity * 0.5;
-    
-    // Reset camera shake after a short delay
-    setTimeout(() => {
-        camera.rotation.y = 0;
-    }, 100);
-}
-
-// Play empty gun sound
-function playEmptySound() {
-    // Create a temporary element to show "Click!" text
-    const clickText = document.createElement('div');
-    clickText.textContent = '*click*';
-    clickText.style.position = 'absolute';
-    clickText.style.top = '50%';
-    clickText.style.left = '50%';
-    clickText.style.transform = 'translate(-50%, -50%)';
-    clickText.style.color = 'white';
-    clickText.style.fontSize = '24px';
-    document.body.appendChild(clickText);
-    
-    setTimeout(() => {
-        document.body.removeChild(clickText);
-    }, 500);
-}
-
-// Create muzzle flash effect
-function createMuzzleFlash() {
-    const flashGeometry = new THREE.SphereGeometry(0.2, 8, 8);
-    const flashMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffff00,
-        transparent: true,
-        opacity: 1
-    });
-    const flash = new THREE.Mesh(flashGeometry, flashMaterial);
-    
-    // Position flash at gun barrel
-    const flashPosition = new THREE.Vector3(0, 0, -1.5);
-    flashPosition.applyQuaternion(gun.quaternion);
-    flashPosition.add(gun.getWorldPosition(new THREE.Vector3()));
-    flash.position.copy(flashPosition);
-    
-    // Add flash to scene
-    scene.add(flash);
-    
-    // Add point light for muzzle flash
-    const flashLight = new THREE.PointLight(0xffff00, 2, 10);
-    flashLight.position.copy(flashPosition);
-    scene.add(flashLight);
-    
-    // Animate flash
-    let opacity = 1;
-    const fadeOut = setInterval(() => {
-        opacity -= 0.1;
-        if (opacity <= 0) {
-            clearInterval(fadeOut);
-            scene.remove(flash);
-            scene.remove(flashLight);
-        }
-        flashMaterial.opacity = opacity;
-        flashLight.intensity = opacity * 2;
-    }, 20);
-}
-
-// Create targets
-function createTargets(count) {
-    for (let i = 0; i < count; i++) {
-        const targetGeometry = new THREE.SphereGeometry(0.5, 16, 16);
-        const targetMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0xff0000,
-            emissive: 0xff0000,
-            emissiveIntensity: 0.5
-        });
-        const target = new THREE.Mesh(targetGeometry, targetMaterial);
-        
-        // Random position in space
-        target.position.x = (Math.random() - 0.5) * 200;
-        target.position.y = (Math.random() - 0.5) * 200;
-        target.position.z = (Math.random() - 0.5) * 200;
-        
-        // Ensure targets are not too close to player
-        const distanceToPlayer = target.position.distanceTo(player.position);
-        if (distanceToPlayer < 50) {
-            i--; // Try again
-            continue;
-        }
-        
-        // Random movement direction
-        target.userData.direction = new THREE.Vector3(
-            Math.random() * 2 - 1,
-            Math.random() * 2 - 1,
-            Math.random() * 2 - 1
-        ).normalize();
-        
-        target.userData.speed = 0.2 + Math.random() * 0.3;
-        
-        // Add glow effect
-        const targetLight = new THREE.PointLight(0xff0000, 1, 3);
-        target.add(targetLight);
-        
-        scene.add(target);
-        targets.push(target);
-    }
-}
-
-// Create hit marker
-function createHitMarker(position, damage) {
-    // Create hit marker text
-    const hitMarkerDiv = document.createElement('div');
-    hitMarkerDiv.textContent = damage;
-    hitMarkerDiv.style.position = 'absolute';
-    hitMarkerDiv.style.color = 'red';
-    hitMarkerDiv.style.fontSize = '24px';
-    hitMarkerDiv.style.fontWeight = 'bold';
-    hitMarkerDiv.style.textShadow = '2px 2px 2px black';
-    document.body.appendChild(hitMarkerDiv);
-    
-    // Store hit marker data
-    const hitMarker = {
-        element: hitMarkerDiv,
-        position: position.clone(),
-        createdAt: Date.now(),
-        lifetime: 1000, // 1 second
-        opacity: 1
-    };
-    
-    hitMarkers.push(hitMarker);
-}
-
-// Update hit markers
-function updateHitMarkers() {
-    for (let i = hitMarkers.length - 1; i >= 0; i--) {
-        const marker = hitMarkers[i];
-        
-        // Check if marker should be removed
-        if (Date.now() - marker.createdAt > marker.lifetime) {
-            document.body.removeChild(marker.element);
-            hitMarkers.splice(i, 1);
-            continue;
-        }
-        
-        // Update marker position
-        const screenPosition = marker.position.clone().project(camera);
-        const x = (screenPosition.x * 0.5 + 0.5) * window.innerWidth;
-        const y = (-(screenPosition.y * 0.5) + 0.5) * window.innerHeight;
-        
-        marker.element.style.left = `${x}px`;
-        marker.element.style.top = `${y}px`;
-        
-        // Update opacity
-        const elapsed = Date.now() - marker.createdAt;
-        marker.opacity = 1 - (elapsed / marker.lifetime);
-        marker.element.style.opacity = marker.opacity;
-        
-        // Move upward
-        marker.position.y += 0.05;
-    }
-}
-
 // Update player movement
 function updatePlayerMovement(delta) {
     // Calculate movement direction
@@ -911,7 +1108,7 @@ function updatePlayerMovement(delta) {
     playerDirection.normalize();
     
     // Apply movement to velocity
-    const speed = 30;
+    const speed = 5;
     if (moveForward || moveBackward) playerVelocity.z = -playerDirection.z * speed * delta;
     if (moveLeft || moveRight) playerVelocity.x = -playerDirection.x * speed * delta;
     
@@ -921,230 +1118,226 @@ function updatePlayerMovement(delta) {
     // Update player position
     player.position.add(playerVelocity);
     
+    // Limit player movement to circus area
+    const distanceFromCenter = Math.sqrt(
+        player.position.x * player.position.x + 
+        player.position.z * player.position.z
+    );
+    
+    if (distanceFromCenter > 45) {
+        const angle = Math.atan2(player.position.z, player.position.x);
+        player.position.x = Math.cos(angle) * 45;
+        player.position.z = Math.sin(angle) * 45;
+    }
+    
     // Reset velocity
     playerVelocity.set(0, 0, 0);
-}
-
-// Update gun
-function updateGun() {
-    // Recover from recoil
-    if (recoilAmount > 0) {
-        recoilAmount -= recoilRecovery;
-        if (recoilAmount < 0) recoilAmount = 0;
-        
-        // Apply recoil recovery to gun position
-        gun.position.z = gun.userData.originalPosition.z + recoilAmount;
-    }
     
-    // Handle automatic fire
-    if (isShooting && fireMode === 'auto' && !isReloading) {
-        shoot();
-    }
-}
-
-// Update bullets
-function updateBullets() {
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        const bullet = bullets[i];
+    // Animate hands while walking
+    if (moveForward || moveBackward || moveLeft || moveRight) {
+        // Get left and right arm groups
+        const leftArmGroup = character.children[0];
+        const rightArmGroup = character.children[1];
         
-        // Move bullet
-        bullet.position.add(bullet.userData.direction.clone().multiplyScalar(1));
+        // Bobbing motion
+        const bobAmount = Math.sin(Date.now() * 0.01) * 0.05;
         
-        // Remove bullet if it goes too far
-        if (bullet.position.distanceTo(player.position) > 500) {
-            scene.remove(bullet);
-            bullets.splice(i, 1);
-            continue;
-        }
+        // Swinging motion
+        const swingAmount = Math.sin(Date.now() * 0.01) * 0.1;
         
-        // Check for collisions with targets
-        for (let j = targets.length - 1; j >= 0; j--) {
-            const target = targets[j];
-            const distance = bullet.position.distanceTo(target.position);
+        // Apply animations to arm groups
+        if (leftArmGroup && rightArmGroup) {
+            // Vertical bobbing
+            leftArmGroup.position.y = -0.5 + bobAmount;
+            rightArmGroup.position.y = -0.5 - bobAmount;
             
-            if (distance < 0.6) { // Hit!
-                // Create hit marker
-                createHitMarker(target.position, bullet.userData.damage);
-                
-                // Remove bullet
-                scene.remove(bullet);
-                bullets.splice(i, 1);
-                
-                // Remove target
-                scene.remove(target);
-                targets.splice(j, 1);
-                
-                // Increase score
-                score += 10;
-                scoreElement.textContent = `Score: ${score}`;
-                
-                // Create explosion effect
-                createExplosion(target.position);
-                
-                // Create new target
-                setTimeout(() => {
-                    if (!isGameOver) createTargets(1);
-                }, 1000);
-                
-                break;
-            }
+            // Forward/backward swinging
+            leftArmGroup.rotation.x = Math.PI / 6 + swingAmount;
+            rightArmGroup.rotation.x = Math.PI / 6 - swingAmount;
+            
+            // Slight side-to-side motion
+            leftArmGroup.rotation.z = Math.PI / 30 * Math.sin(Date.now() * 0.008);
+            rightArmGroup.rotation.z = -Math.PI / 30 * Math.sin(Date.now() * 0.008);
+        }
+    } else {
+        // Reset hand positions when not moving
+        const leftArmGroup = character.children[0];
+        const rightArmGroup = character.children[1];
+        
+        if (leftArmGroup && rightArmGroup) {
+            leftArmGroup.position.y = -0.5;
+            rightArmGroup.position.y = -0.5;
+            leftArmGroup.rotation.x = Math.PI / 6;
+            rightArmGroup.rotation.x = Math.PI / 6;
+            leftArmGroup.rotation.z = 0;
+            rightArmGroup.rotation.z = 0;
         }
     }
 }
 
-// Create explosion effect
-function createExplosion(position) {
-    const particleCount = 20;
-    const particles = [];
+// Check for protocol proximity
+function checkProtocolProximity() {
+    let nearestBuilding = null;
+    let minDistance = 5; // Minimum distance to interact
     
-    for (let i = 0; i < particleCount; i++) {
-        const particleGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-        const particleMaterial = new THREE.MeshBasicMaterial({
-            color: 0xff5500,
-            transparent: true,
-            opacity: 1
-        });
-        const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+    cityBuildings.forEach(building => {
+        const distance = player.position.distanceTo(building.position);
         
-        // Position particle at explosion center
-        particle.position.copy(position);
-        
-        // Random direction
-        particle.userData.direction = new THREE.Vector3(
-            Math.random() * 2 - 1,
-            Math.random() * 2 - 1,
-            Math.random() * 2 - 1
-        ).normalize();
-        
-        particle.userData.speed = 0.1 + Math.random() * 0.2;
-        
-        scene.add(particle);
-        particles.push(particle);
-    }
+        if (distance < minDistance) {
+            nearestBuilding = building.userData.protocol;
+            minDistance = distance;
+        }
+    });
     
-    // Animate particles
-    let size = 0.1;
-    const animateExplosion = setInterval(() => {
-        size += 0.05;
-        let particlesRemaining = particles.length;
+    // Update UI based on proximity
+    if (nearestBuilding !== currentBuilding) {
+        currentBuilding = nearestBuilding;
         
-        for (let i = 0; i < particles.length; i++) {
-            const particle = particles[i];
-            if (!particle) continue;
+        if (currentBuilding) {
+            // Show building info
+            locationInfoElement.textContent = `Near: ${currentBuilding.name}`;
+            buildingNameElement.textContent = currentBuilding.name;
+            buildingDescElement.textContent = currentBuilding.description;
             
-            // Move particle
-            particle.position.add(particle.userData.direction.clone().multiplyScalar(particle.userData.speed));
+            // Update shop items
+            const shopItemsContainer = document.getElementById('shop-items');
+            shopItemsContainer.innerHTML = ''; // Clear previous items
             
-            // Increase size
-            particle.scale.set(size, size, size);
-            
-            // Fade out
-            particle.material.opacity -= 0.02;
-            
-            if (particle.material.opacity <= 0) {
-                scene.remove(particle);
-                particles[i] = null;
-                particlesRemaining--;
+            if (currentBuilding.items && currentBuilding.items.length > 0) {
+                // Create and add shop items
+                currentBuilding.items.forEach(item => {
+                    const itemElement = document.createElement('div');
+                    itemElement.className = 'shop-item';
+                    
+                    const nameElement = document.createElement('h3');
+                    nameElement.textContent = item.name;
+                    itemElement.appendChild(nameElement);
+                    
+                    const descElement = document.createElement('p');
+                    descElement.textContent = item.description;
+                    itemElement.appendChild(descElement);
+                    
+                    const priceElement = document.createElement('p');
+                    priceElement.className = 'price';
+                    priceElement.textContent = item.price;
+                    itemElement.appendChild(priceElement);
+                    
+                    // Add click event to "purchase" item (just a visual effect for now)
+                    itemElement.addEventListener('click', () => {
+                        // Flash effect on click
+                        itemElement.style.backgroundColor = 'rgba(20, 241, 149, 0.5)';
+                        setTimeout(() => {
+                            itemElement.style.backgroundColor = 'rgba(153, 69, 255, 0.2)';
+                        }, 300);
+                        
+                        // Show purchase message
+                        const currentText = locationInfoElement.textContent;
+                        locationInfoElement.textContent = `Purchased: ${item.name}`;
+                        setTimeout(() => {
+                            locationInfoElement.textContent = currentText;
+                        }, 2000);
+                    });
+                    
+                    shopItemsContainer.appendChild(itemElement);
+                });
+                
+                document.querySelector('.shop-title').style.display = 'block';
+            } else {
+                document.querySelector('.shop-title').style.display = 'none';
             }
-        }
-        
-        if (particlesRemaining === 0) {
-            clearInterval(animateExplosion);
-        }
-    }, 20);
-}
-
-// Update targets
-function updateTargets() {
-    for (const target of targets) {
-        // Move target
-        target.position.add(target.userData.direction.clone().multiplyScalar(target.userData.speed));
-        
-        // Check for collision with player
-        const distance = target.position.distanceTo(player.position);
-        if (distance < 2) {
-            health -= 10;
-            healthElement.textContent = `Health: ${health}`;
             
-            // Move target away from player
-            target.position.add(target.userData.direction.clone().multiplyScalar(5));
-            
-            if (health <= 0) {
-                gameOver();
-            }
+            buildingInfoElement.style.display = 'block';
+        } else {
+            // Hide building info
+            locationInfoElement.textContent = 'Exploring Solana City';
+            buildingInfoElement.style.display = 'none';
         }
     }
 }
 
-// Update planets
-function updatePlanets() {
-    for (const planet of planets) {
-        // Rotate planet
-        planet.rotation.y += planet.userData.rotationSpeed;
-        
-        // Rotate moons
-        planet.children.forEach(child => {
-            if (child.userData.rotationSpeed) {
-                child.rotation.y += child.userData.rotationSpeed;
-            }
-        });
-        
-        // Check if player is inside a planet
-        const distance = planet.position.distanceTo(player.position);
-        const planetRadius = planet.geometry.parameters.radius;
-        
-        if (distance < planetRadius) {
-            // Player is inside the planet - move them out
-            const direction = new THREE.Vector3().subVectors(player.position, planet.position).normalize();
-            player.position.copy(planet.position).add(direction.multiplyScalar(planetRadius + 1));
+// Initialize mini-map
+function initMinimap() {
+    // Get mini-map elements
+    const minimapContainer = document.getElementById('minimap');
+    minimapPlayerIndicator = document.querySelector('.player-indicator');
+    minimapDirectionIndicator = document.querySelector('.direction-indicator');
+    
+    // Clear any existing building indicators
+    buildingIndicators.forEach(indicator => {
+        if (indicator && indicator.parentNode) {
+            indicator.parentNode.removeChild(indicator);
         }
-    }
+    });
+    buildingIndicators = [];
+    
+    // Create building indicators on the mini-map
+    buildings.forEach(building => {
+        const indicator = document.createElement('div');
+        indicator.className = 'building-indicator';
+        minimapContainer.appendChild(indicator);
+        buildingIndicators.push(indicator);
+    });
 }
 
-// Game over
-function gameOver() {
-    isGameOver = true;
-    gameOverElement.style.display = 'block';
-    restartButton.style.display = 'block';
+// Update mini-map
+function updateMinimap() {
+    // Mini-map dimensions
+    const mapSize = 150;
+    const mapRadius = mapSize / 2;
+    const worldRadius = 50; // Radius of the playable area
+    
+    // Update player position on mini-map
+    const playerX = player.position.x;
+    const playerZ = player.position.z;
+    
+    // Convert world coordinates to mini-map coordinates
+    const minimapX = (playerX / worldRadius) * mapRadius + mapRadius;
+    const minimapZ = (playerZ / worldRadius) * mapRadius + mapRadius;
+    
+    // Update player indicator position
+    minimapPlayerIndicator.style.left = `${minimapX}px`;
+    minimapPlayerIndicator.style.top = `${minimapZ}px`;
+    
+    // Update direction indicator
+    const directionX = minimapX + Math.sin(player.rotation.y) * 10;
+    const directionZ = minimapZ - Math.cos(player.rotation.y) * 10;
+    
+    minimapDirectionIndicator.style.left = `${minimapX}px`;
+    minimapDirectionIndicator.style.top = `${minimapZ}px`;
+    minimapDirectionIndicator.style.transform = `translate(-50%, -100%) rotate(${player.rotation.y}rad)`;
+    
+    // Update building indicators
+    buildings.forEach((building, index) => {
+        if (index < buildingIndicators.length) {
+            const indicator = buildingIndicators[index];
+            const buildingX = (building.position.x / worldRadius) * mapRadius + mapRadius;
+            const buildingZ = (building.position.z / worldRadius) * mapRadius + mapRadius;
+            
+            indicator.style.left = `${buildingX}px`;
+            indicator.style.top = `${buildingZ}px`;
+        }
+    });
 }
 
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
     
-    const delta = clock.getDelta();
-    
     if (!isGameOver) {
+        const delta = clock.getDelta();
+        
+        // Update player movement
         updatePlayerMovement(delta);
-        updateGun();
-        updateBullets();
-        updateTargets();
-        updatePlanets();
-        updateHitMarkers();
+        
+        // Check for protocol proximity
+        checkProtocolProximity();
+        
+        // Update mini-map
+        updateMinimap();
     }
     
     renderer.render(scene, camera);
 }
-
-// Restart game
-restartButton.addEventListener('click', () => {
-    // Remove old renderer
-    document.body.removeChild(renderer.domElement);
-    
-    // Remove all objects from scene
-    while(scene.children.length > 0) { 
-        scene.remove(scene.children[0]); 
-    }
-    
-    // Remove all hit markers
-    for (const marker of hitMarkers) {
-        document.body.removeChild(marker.element);
-    }
-    hitMarkers = [];
-    
-    // Initialize new game
-    init();
-});
 
 // Start the game
 init(); 

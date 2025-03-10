@@ -3,121 +3,683 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Space Shooter - 3D Game</title>
+    <title>Solana Protocol Street</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
             font-family: Arial, sans-serif;
         }
-        #score {
+        #interaction-prompt {
             position: absolute;
-            top: 10px;
-            left: 10px;
-            color: white;
-            font-size: 24px;
-        }
-        #health {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            color: white;
-            font-size: 24px;
-        }
-        #game-over {
-            position: absolute;
-            top: 50%;
+            bottom: 50px;
             left: 50%;
-            transform: translate(-50%, -50%);
-            color: red;
-            font-size: 48px;
-            display: none;
-        }
-        #restart {
-            position: absolute;
-            top: 60%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
             padding: 10px 20px;
-            font-size: 24px;
+            border-radius: 5px;
+            font-size: 18px;
             display: none;
-            cursor: pointer;
+            border-left: 4px solid #14F195;
+        }
+        #protocol-info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            max-width: 300px;
+            font-size: 14px;
+            display: none;
+            border-left: 4px solid #14F195;
+        }
+        #protocol-info h2 {
+            margin-top: 0;
+            color: #14F195;
+        }
+        #protocol-info ul {
+            padding-left: 20px;
+            margin-bottom: 0;
         }
         #instructions {
             position: absolute;
             bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
             color: white;
-            font-size: 16px;
-            text-align: center;
-            background-color: rgba(0, 0, 0, 0.5);
-            padding: 10px;
+            padding: 15px;
             border-radius: 5px;
-            max-width: 80%;
-        }
-        #instructions-toggle {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            color: white;
-            background-color: rgba(0, 0, 0, 0.5);
-            border: 1px solid white;
-            padding: 5px 10px;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-        #weapon-info {
-            position: absolute;
-            bottom: 50px;
-            left: 10px;
-            color: white;
-            font-size: 18px;
-            background-color: rgba(0, 0, 0, 0.5);
-            padding: 5px 10px;
-            border-radius: 5px;
+            max-width: 300px;
+            font-size: 14px;
         }
     </style>
 </head>
 <body>
-    <div id="score">Score: 0</div>
-    <div id="health">Health: 100</div>
-    <div id="game-over">GAME OVER</div>
-    <button id="restart">Restart</button>
-    <div id="weapon-info">Assault Rifle | Auto</div>
+    <div id="interaction-prompt">Press E to interact with PROTOCOL</div>
+    <div id="protocol-info">
+        <h2>Protocol Name</h2>
+        <p>Protocol description goes here.</p>
+        <h3>Features:</h3>
+        <ul id="protocol-features">
+            <li>Feature 1</li>
+            <li>Feature 2</li>
+            <li>Feature 3</li>
+        </ul>
+    </div>
     <div id="instructions">
         <h3>Controls:</h3>
-        <p>W/A/S/D or Arrow Keys: Move through space</p>
-        <p>Mouse: Look around and aim</p>
-        <p>Click: Shoot</p>
-        <p>R: Reload weapon</p>
-        <p>F: Toggle fire mode (single/burst/auto)</p>
-        <p>1-3: Switch weapons (Pistol, Assault Rifle, Shotgun)</p>
-        <p>Explore planets and shoot red enemy targets!</p>
+        <p>WASD or Arrow Keys: Move</p>
+        <p>Mouse: Look around</p>
+        <p>E: Interact with protocols</p>
     </div>
-    <button id="instructions-toggle">Hide Instructions</button>
     
-    <script type="module" src="./js/main.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script>
-        // Instructions toggle
-        const instructionsElement = document.getElementById('instructions');
-        const instructionsToggle = document.getElementById('instructions-toggle');
-        
-        instructionsToggle.addEventListener('click', () => {
-            if (instructionsElement.style.display === 'none') {
-                instructionsElement.style.display = 'block';
-                instructionsToggle.textContent = 'Hide Instructions';
-            } else {
-                instructionsElement.style.display = 'none';
-                instructionsToggle.textContent = 'Show Instructions';
+        // Wait for Three.js to load
+        window.addEventListener('load', function() {
+            // Main variables
+            let scene, camera, renderer;
+            let player;
+            let clock = new THREE.Clock();
+            let raycaster, mouse;
+            let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+            let playerVelocity = new THREE.Vector3();
+            let playerDirection = new THREE.Vector3();
+
+            // Protocol data
+            const protocolData = [
+                {
+                    name: "JITO",
+                    description: "High-performance validator infrastructure for Solana",
+                    themeColor: 0x00FF99, // Bright green
+                    position: new THREE.Vector3(-30, 0, -10),
+                    style: "sleek",
+                    website: "https://jito.network/",
+                    features: ["Validator infrastructure", "MEV extraction", "Block building"]
+                },
+                {
+                    name: "DRIFT",
+                    description: "Decentralized exchange for perpetual futures trading",
+                    themeColor: 0x00BFFF, // Bright blue
+                    position: new THREE.Vector3(-18, 0, -10),
+                    style: "sporty",
+                    website: "https://www.drift.trade/",
+                    features: ["Perpetual futures", "Leverage trading", "Cross-margin"]
+                },
+                {
+                    name: "JUPITER",
+                    description: "Liquidity aggregator providing the best swap routes",
+                    themeColor: 0xFFA500, // Orange
+                    position: new THREE.Vector3(-6, 0, -10),
+                    style: "astronomical",
+                    website: "https://jup.ag/",
+                    features: ["Token swaps", "Liquidity aggregation", "Best price routing"]
+                },
+                {
+                    name: "PHANTOM",
+                    description: "User-friendly wallet for the Solana ecosystem",
+                    themeColor: 0x9945FF, // Purple
+                    position: new THREE.Vector3(6, 0, -10),
+                    style: "minimal",
+                    website: "https://phantom.app/",
+                    features: ["Wallet services", "NFT support", "DApp connections"]
+                },
+                {
+                    name: "MARGINFI",
+                    description: "Decentralized lending and borrowing protocol",
+                    themeColor: 0x14F195, // Solana green
+                    position: new THREE.Vector3(18, 0, -10),
+                    style: "financial",
+                    website: "https://marginfi.com/",
+                    features: ["Lending", "Borrowing", "Yield farming"]
+                },
+                {
+                    name: "ORCA",
+                    description: "User-friendly decentralized exchange on Solana",
+                    themeColor: 0x00CED1, // Turquoise
+                    position: new THREE.Vector3(30, 0, -10),
+                    style: "oceanic",
+                    website: "https://www.orca.so/",
+                    features: ["Token swaps", "Liquidity pools", "Yield farming"]
+                }
+            ];
+
+            // UI elements
+            let interactionPrompt = document.getElementById('interaction-prompt');
+            let protocolInfo = document.getElementById('protocol-info');
+            let protocolFeaturesList = document.getElementById('protocol-features');
+            let currentProtocol = null;
+            let shopObjects = [];
+
+            // Initialize the scene
+            function init() {
+                // Create scene
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x050A30); // Dark blue night sky
+                scene.fog = new THREE.FogExp2(0x050A30, 0.002);
+                
+                // Create camera
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.set(0, 1.7, 10); // Eye level
+                
+                // Create renderer
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.shadowMap.enabled = true;
+                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                document.body.appendChild(renderer.domElement);
+                
+                // Add ambient light
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+                scene.add(ambientLight);
+                
+                // Add directional light (moonlight)
+                const moonLight = new THREE.DirectionalLight(0x8888FF, 0.5);
+                moonLight.position.set(50, 100, 50);
+                moonLight.castShadow = true;
+                moonLight.shadow.mapSize.width = 2048;
+                moonLight.shadow.mapSize.height = 2048;
+                moonLight.shadow.camera.near = 0.5;
+                moonLight.shadow.camera.far = 500;
+                moonLight.shadow.camera.left = -100;
+                moonLight.shadow.camera.right = 100;
+                moonLight.shadow.camera.top = 100;
+                moonLight.shadow.camera.bottom = -100;
+                scene.add(moonLight);
+                
+                // Create player
+                player = new THREE.Object3D();
+                player.position.set(0, 1.7, 0);
+                scene.add(player);
+                
+                // Add camera to player
+                player.add(camera);
+                
+                // Setup raycaster for interaction
+                raycaster = new THREE.Raycaster();
+                mouse = new THREE.Vector2();
+                
+                // Create street
+                createStreet();
+                
+                // Create protocol shops
+                createProtocolShops();
+                
+                // Add event listeners
+                window.addEventListener('resize', onWindowResize);
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('keydown', onKeyDown);
+                document.addEventListener('keyup', onKeyUp);
+                document.addEventListener('keypress', onKeyPress);
+                
+                // Lock pointer for FPS controls
+                renderer.domElement.addEventListener('click', function() {
+                    renderer.domElement.requestPointerLock();
+                });
+                
+                // Start animation loop
+                animate();
             }
+
+            // Create the street with road, sidewalks, and lamp posts
+            function createStreet() {
+                // Create road
+                const roadWidth = 10;
+                const roadLength = 100;
+                const roadGeometry = new THREE.PlaneGeometry(roadWidth, roadLength);
+                const roadMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x111111,
+                    roughness: 0.3,
+                    metalness: 0.2
+                });
+                const road = new THREE.Mesh(roadGeometry, roadMaterial);
+                road.rotation.x = -Math.PI / 2;
+                road.receiveShadow = true;
+                scene.add(road);
+                
+                // Create lane dividers
+                const dividerCount = 20;
+                const dividerSpacing = roadLength / dividerCount;
+                const dividerWidth = 0.2;
+                const dividerLength = 2;
+                
+                for (let i = 0; i < dividerCount; i++) {
+                    const dividerGeometry = new THREE.PlaneGeometry(dividerWidth, dividerLength);
+                    const dividerMaterial = new THREE.MeshStandardMaterial({
+                        color: 0x14F195, // Solana green
+                        emissive: 0x14F195,
+                        emissiveIntensity: 0.5,
+                        roughness: 0.3,
+                        metalness: 0.7
+                    });
+                    const divider = new THREE.Mesh(dividerGeometry, dividerMaterial);
+                    divider.rotation.x = -Math.PI / 2;
+                    divider.position.set(0, 0.01, -roadLength/2 + i * dividerSpacing + dividerLength/2);
+                    divider.receiveShadow = true;
+                    scene.add(divider);
+                }
+                
+                // Create sidewalks
+                const sidewalkWidth = 5;
+                const sidewalkHeight = 0.2;
+                const sidewalkGeometry = new THREE.BoxGeometry(sidewalkWidth, sidewalkHeight, roadLength);
+                const sidewalkMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x333333,
+                    roughness: 0.8,
+                    metalness: 0.2
+                });
+                
+                // Left sidewalk
+                const leftSidewalk = new THREE.Mesh(sidewalkGeometry, sidewalkMaterial);
+                leftSidewalk.position.set(-roadWidth/2 - sidewalkWidth/2, sidewalkHeight/2, 0);
+                leftSidewalk.receiveShadow = true;
+                scene.add(leftSidewalk);
+                
+                // Right sidewalk
+                const rightSidewalk = new THREE.Mesh(sidewalkGeometry, sidewalkMaterial);
+                rightSidewalk.position.set(roadWidth/2 + sidewalkWidth/2, sidewalkHeight/2, 0);
+                rightSidewalk.receiveShadow = true;
+                scene.add(rightSidewalk);
+                
+                // Create lamp posts
+                const lampCount = 10;
+                const lampSpacing = roadLength / lampCount;
+                
+                for (let i = 0; i < lampCount; i++) {
+                    // Left side lamps
+                    createLampPost(-roadWidth/2 - 2, 0, -roadLength/2 + i * lampSpacing);
+                    
+                    // Right side lamps
+                    createLampPost(roadWidth/2 + 2, 0, -roadLength/2 + i * lampSpacing);
+                }
+                
+                // Add some decorative elements
+                addStreetDecorations();
+            }
+
+            // Create a futuristic lamp post
+            function createLampPost(x, y, z) {
+                const lampGroup = new THREE.Group();
+                lampGroup.position.set(x, y, z);
+                
+                // Lamp base
+                const baseGeometry = new THREE.CylinderGeometry(0.3, 0.4, 0.2, 8);
+                const baseMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x333333,
+                    roughness: 0.5,
+                    metalness: 0.8
+                });
+                const base = new THREE.Mesh(baseGeometry, baseMaterial);
+                base.position.y = 0.1;
+                base.castShadow = true;
+                lampGroup.add(base);
+                
+                // Lamp pole
+                const poleGeometry = new THREE.CylinderGeometry(0.1, 0.1, 5, 8);
+                const poleMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x666666,
+                    roughness: 0.3,
+                    metalness: 0.9
+                });
+                const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+                pole.position.y = 2.5;
+                pole.castShadow = true;
+                lampGroup.add(pole);
+                
+                // Lamp head
+                const headGeometry = new THREE.CylinderGeometry(0.5, 0.3, 0.2, 8);
+                const headMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x333333,
+                    roughness: 0.3,
+                    metalness: 0.9
+                });
+                const head = new THREE.Mesh(headGeometry, headMaterial);
+                head.position.y = 5;
+                head.castShadow = true;
+                lampGroup.add(head);
+                
+                // Lamp light
+                const lightGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+                const lightMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xFFFFFF,
+                    emissive: 0xFFFFFF,
+                    emissiveIntensity: 1.0
+                });
+                const light = new THREE.Mesh(lightGeometry, lightMaterial);
+                light.position.y = 4.9;
+                lampGroup.add(light);
+                
+                // Add actual light source
+                const pointLight = new THREE.PointLight(0xCCDDFF, 1, 15);
+                pointLight.position.set(0, 4.9, 0);
+                lampGroup.add(pointLight);
+                
+                scene.add(lampGroup);
+            }
+
+            // Add decorative elements to the street
+            function addStreetDecorations() {
+                // Floating Solana logo
+                const solanaLogoGeometry = new THREE.CircleGeometry(2, 32);
+                const solanaLogoMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x14F195,
+                    transparent: true,
+                    opacity: 0.7,
+                    side: THREE.DoubleSide
+                });
+                const solanaLogo = new THREE.Mesh(solanaLogoGeometry, solanaLogoMaterial);
+                solanaLogo.position.set(0, 10, -20);
+                solanaLogo.rotation.x = Math.PI / 2;
+                scene.add(solanaLogo);
+                
+                // Add some floating particles
+                for (let i = 0; i < 50; i++) {
+                    const particleGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+                    const particleMaterial = new THREE.MeshBasicMaterial({
+                        color: new THREE.Color(Math.random(), Math.random(), Math.random()),
+                        transparent: true,
+                        opacity: 0.7
+                    });
+                    const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+                    
+                    // Random position within street bounds
+                    particle.position.set(
+                        (Math.random() - 0.5) * 30,
+                        Math.random() * 5 + 2,
+                        (Math.random() - 0.5) * 80
+                    );
+                    
+                    // Store initial position for animation
+                    particle.userData.initialY = particle.position.y;
+                    particle.userData.speed = 0.001 + Math.random() * 0.002;
+                    
+                    scene.add(particle);
+                }
+            }
+
+            // Create protocol shops
+            function createProtocolShops() {
+                protocolData.forEach(protocol => {
+                    // Create a generic shop with protocol-specific styling
+                    const shopGroup = createGenericShop(protocol);
+                    shopObjects.push(shopGroup);
+                });
+            }
+
+            // Create a generic shop with protocol-specific styling
+            function createGenericShop(protocol) {
+                const shopGroup = new THREE.Group();
+                shopGroup.position.copy(protocol.position);
+                shopGroup.userData.protocol = protocol;
+                
+                // Base structure
+                const baseGeometry = new THREE.BoxGeometry(8, 6, 8);
+                const baseMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x222222,
+                    roughness: 0.2,
+                    metalness: 0.8
+                });
+                const base = new THREE.Mesh(baseGeometry, baseMaterial);
+                base.position.y = 3;
+                base.castShadow = true;
+                base.receiveShadow = true;
+                shopGroup.add(base);
+                
+                // Protocol-colored trim
+                const trimGeometry = new THREE.BoxGeometry(8.2, 0.1, 8.2);
+                const trimMaterial = new THREE.MeshStandardMaterial({
+                    color: protocol.themeColor,
+                    emissive: protocol.themeColor,
+                    emissiveIntensity: 0.8,
+                    roughness: 0.3,
+                    metalness: 0.8
+                });
+                
+                // Bottom trim
+                const bottomTrim = new THREE.Mesh(trimGeometry, trimMaterial);
+                bottomTrim.position.y = 0.1;
+                shopGroup.add(bottomTrim);
+                
+                // Top trim
+                const topTrim = new THREE.Mesh(trimGeometry, trimMaterial);
+                topTrim.position.y = 6;
+                shopGroup.add(topTrim);
+                
+                // Entrance
+                const entranceGeometry = new THREE.BoxGeometry(2, 3, 0.1);
+                const entranceMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x000000,
+                    roughness: 0.2,
+                    metalness: 0.5,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                const entrance = new THREE.Mesh(entranceGeometry, entranceMaterial);
+                entrance.position.set(0, 1.5, 4);
+                shopGroup.add(entrance);
+                
+                // Entrance frame
+                const frameGeometry = new THREE.BoxGeometry(2.4, 3.4, 0.2);
+                const frameMaterial = new THREE.MeshStandardMaterial({
+                    color: protocol.themeColor,
+                    emissive: protocol.themeColor,
+                    emissiveIntensity: 0.8
+                });
+                const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+                frame.position.set(0, 1.5, 4.05);
+                shopGroup.add(frame);
+                
+                // Protocol logo
+                const logoGeometry = new THREE.CircleGeometry(1, 32);
+                const logoMaterial = new THREE.MeshStandardMaterial({
+                    color: protocol.themeColor,
+                    emissive: protocol.themeColor,
+                    emissiveIntensity: 1.0,
+                    side: THREE.DoubleSide
+                });
+                const logo = new THREE.Mesh(logoGeometry, logoMaterial);
+                logo.position.set(0, 5, 4.1);
+                shopGroup.add(logo);
+                
+                // Add shop to scene
+                scene.add(shopGroup);
+                return shopGroup;
+            }
+
+            // Update interaction prompt
+            function updateInteractionPrompt(protocol) {
+                if (protocol) {
+                    interactionPrompt.textContent = `Press E to interact with ${protocol.name}`;
+                    interactionPrompt.style.display = 'block';
+                    interactionPrompt.style.borderLeftColor = '#' + protocol.themeColor.toString(16).padStart(6, '0');
+                } else {
+                    interactionPrompt.style.display = 'none';
+                }
+            }
+
+            // Update protocol info panel
+            function updateProtocolInfo(protocol) {
+                if (protocol) {
+                    const nameElement = protocolInfo.querySelector('h2');
+                    const descElement = protocolInfo.querySelector('p');
+                    
+                    nameElement.textContent = protocol.name;
+                    descElement.textContent = protocol.description;
+                    
+                    // Update features list
+                    protocolFeaturesList.innerHTML = '';
+                    protocol.features.forEach(feature => {
+                        const li = document.createElement('li');
+                        li.textContent = feature;
+                        protocolFeaturesList.appendChild(li);
+                    });
+                    
+                    protocolInfo.style.display = 'block';
+                    protocolInfo.style.borderLeftColor = '#' + protocol.themeColor.toString(16).padStart(6, '0');
+                } else {
+                    protocolInfo.style.display = 'none';
+                }
+            }
+
+            // Handle window resize
+            function onWindowResize() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            // Handle mouse movement
+            function onMouseMove(event) {
+                // Only rotate camera if pointer is locked
+                if (document.pointerLockElement === renderer.domElement) {
+                    // Rotate player based on mouse movement (horizontal only)
+                    player.rotation.y -= event.movementX * 0.002;
+                    
+                    // Limit vertical camera rotation
+                    const verticalRotation = camera.rotation.x - event.movementY * 0.002;
+                    camera.rotation.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, verticalRotation));
+                }
+            }
+
+            // Handle key down
+            function onKeyDown(event) {
+                switch (event.code) {
+                    case 'KeyW':
+                    case 'ArrowUp':
+                        moveForward = true;
+                        break;
+                    case 'KeyS':
+                    case 'ArrowDown':
+                        moveBackward = true;
+                        break;
+                    case 'KeyA':
+                    case 'ArrowLeft':
+                        moveLeft = true;
+                        break;
+                    case 'KeyD':
+                    case 'ArrowRight':
+                        moveRight = true;
+                        break;
+                }
+            }
+
+            // Handle key up
+            function onKeyUp(event) {
+                switch (event.code) {
+                    case 'KeyW':
+                    case 'ArrowUp':
+                        moveForward = false;
+                        break;
+                    case 'KeyS':
+                    case 'ArrowDown':
+                        moveBackward = false;
+                        break;
+                    case 'KeyA':
+                    case 'ArrowLeft':
+                        moveLeft = false;
+                        break;
+                    case 'KeyD':
+                    case 'ArrowRight':
+                        moveRight = false;
+                        break;
+                }
+            }
+
+            // Handle key press (for interaction)
+            function onKeyPress(event) {
+                if (event.code === 'KeyE' && currentProtocol) {
+                    // Open protocol website in new tab
+                    window.open(currentProtocol.website, '_blank');
+                }
+            }
+
+            // Update player movement
+            function updatePlayerMovement(delta) {
+                // Calculate movement direction
+                playerDirection.z = Number(moveForward) - Number(moveBackward);
+                playerDirection.x = Number(moveRight) - Number(moveLeft);
+                playerDirection.normalize();
+                
+                // Apply movement to velocity
+                const speed = 10;
+                if (moveForward || moveBackward) playerVelocity.z = -playerDirection.z * speed * delta;
+                if (moveLeft || moveRight) playerVelocity.x = -playerDirection.x * speed * delta;
+                
+                // Apply rotation to movement direction
+                playerVelocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+                
+                // Update player position
+                player.position.add(playerVelocity);
+                
+                // Reset velocity
+                playerVelocity.set(0, 0, 0);
+            }
+
+            // Check for protocol proximity
+            function checkProtocolProximity() {
+                // Direction vector for raycasting
+                const direction = new THREE.Vector3(0, 0, -1);
+                direction.applyQuaternion(camera.quaternion);
+                
+                raycaster.set(player.position, direction);
+                
+                // Find nearest protocol
+                let nearestProtocol = null;
+                let minDistance = 10; // Maximum interaction distance
+                
+                shopObjects.forEach(shop => {
+                    const distance = player.position.distanceTo(shop.position);
+                    
+                    if (distance < minDistance) {
+                        nearestProtocol = shop.userData.protocol;
+                        minDistance = distance;
+                    }
+                });
+                
+                // Update UI based on proximity
+                if (nearestProtocol !== currentProtocol) {
+                    currentProtocol = nearestProtocol;
+                    updateInteractionPrompt(currentProtocol);
+                    updateProtocolInfo(currentProtocol);
+                }
+            }
+
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                const delta = clock.getDelta();
+                
+                // Update player movement
+                updatePlayerMovement(delta);
+                
+                // Check for protocol proximity
+                checkProtocolProximity();
+                
+                // Animate objects
+                scene.traverse(object => {
+                    // Animate floating particles
+                    if (object.userData.initialY !== undefined && object.userData.speed) {
+                        object.position.y = object.userData.initialY + Math.sin(Date.now() * object.userData.speed) * 0.5;
+                    }
+                    
+                    // Animate blinking lights
+                    if (object.userData.blinkSpeed) {
+                        const blinkState = Math.sin(Date.now() * 0.001 * object.userData.blinkSpeed) > 0;
+                        object.material.emissiveIntensity = blinkState ? 1.0 : 0.2;
+                    }
+                });
+                
+                // Render scene
+                renderer.render(scene, camera);
+            }
+
+            // Start the application
+            init();
         });
-        
-        // Auto-hide instructions after 15 seconds
-        setTimeout(() => {
-            instructionsElement.style.display = 'none';
-            instructionsToggle.textContent = 'Show Instructions';
-        }, 15000);
     </script>
 </body>
 </html> 
